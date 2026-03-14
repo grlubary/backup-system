@@ -1,0 +1,6 @@
+*.log
+*.tmp
+*.swp
+
+config/jobs/*.env
+!config/jobs/example-server.env
