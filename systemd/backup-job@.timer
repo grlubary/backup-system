@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule backup job %i
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=backup-job@%i.service
+
+[Install]
+WantedBy=timers.target

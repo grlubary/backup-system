@@ -5,6 +5,7 @@ IFS=$'\n\t'
 LOG_FILE=""
 LOG_JOB=""
 LOCK_FD=9
+RSYNC_OPTS=()
 
 log_line() {
     local level="$1"
@@ -87,6 +88,10 @@ set_backup_defaults() {
     : "${LOG_ROOT:=/var/log/backup-system}"
     : "${STATE_ROOT:=/var/lib/backup-state}"
     : "${RSYNC_SSH:=ssh -o BatchMode=yes}"
+    : "${REQUIRE_MOUNT:=0}"
+    : "${MIN_SNAPSHOT_SIZE_BYTES:=1}"
+    : "${MIN_EXPECTED_ENTRIES:=1}"
+    : "${DRY_RUN:=0}"
 
     if [[ -z "${EXCLUDE_FILE:-}" ]]; then
         EXCLUDE_FILE=""
@@ -109,6 +114,63 @@ validate_job_config() {
     for path in "${BACKUP_PATHS[@]}"; do
         [[ "$path" == /* ]] || die "BACKUP_PATHS must use absolute paths invalid=$path"
     done
+
+    [[ "$DAILY_KEEP" =~ ^[0-9]+$ ]] || die "DAILY_KEEP must be numeric"
+    [[ "$WEEKLY_KEEP" =~ ^[0-9]+$ ]] || die "WEEKLY_KEEP must be numeric"
+    [[ "$MONTHLY_KEEP" =~ ^[0-9]+$ ]] || die "MONTHLY_KEEP must be numeric"
+    [[ "$YEARLY_KEEP" =~ ^[0-9]+$ ]] || die "YEARLY_KEEP must be numeric"
+    [[ "$REQUIRE_MOUNT" =~ ^[01]$ ]] || die "REQUIRE_MOUNT must be 0 or 1"
+    [[ "$DRY_RUN" =~ ^[01]$ ]] || die "DRY_RUN must be 0 or 1"
+    [[ "$MIN_SNAPSHOT_SIZE_BYTES" =~ ^[0-9]+$ ]] || die "MIN_SNAPSHOT_SIZE_BYTES must be numeric"
+    [[ "$MIN_EXPECTED_ENTRIES" =~ ^[0-9]+$ ]] || die "MIN_EXPECTED_ENTRIES must be numeric"
+}
+
+require_command() {
+    local cmd="$1"
+    command -v "$cmd" >/dev/null 2>&1 || die "Required command not found: $cmd"
+}
+
+preflight_checks() {
+    require_command rsync
+    require_command flock
+    require_command find
+    require_command sort
+
+    mkdir -p "$DEST_ROOT" "$LOG_ROOT" "$STATE_ROOT"
+
+    if (( REQUIRE_MOUNT == 1 )); then
+        require_command mountpoint
+        mountpoint -q "$DEST_ROOT" || die "Destination root is not a mounted filesystem: $DEST_ROOT"
+    fi
+
+    [[ -w "$DEST_ROOT" ]] || die "Destination root is not writable: $DEST_ROOT"
+    [[ -w "$LOG_ROOT" ]] || die "Log root is not writable: $LOG_ROOT"
+    [[ -w "$STATE_ROOT" ]] || die "State root is not writable: $STATE_ROOT"
+}
+
+snapshot_entry_count() {
+    local snapshot_dir="$1"
+    find "$snapshot_dir" -mindepth 1 | wc -l | awk '{print $1}'
+}
+
+validate_snapshot_integrity() {
+    local snapshot_dir="$1"
+    local size_bytes entry_count
+
+    [[ -d "$snapshot_dir" ]] || die "Snapshot directory was not created: $snapshot_dir"
+
+    size_bytes="$(snapshot_size_bytes "$snapshot_dir")"
+    entry_count="$(snapshot_entry_count "$snapshot_dir")"
+
+    if (( size_bytes < MIN_SNAPSHOT_SIZE_BYTES )); then
+        die "Snapshot is smaller than expected size_bytes=$size_bytes min_bytes=$MIN_SNAPSHOT_SIZE_BYTES path=$snapshot_dir"
+    fi
+
+    if (( entry_count < MIN_EXPECTED_ENTRIES )); then
+        die "Snapshot has fewer entries than expected entries=$entry_count min_entries=$MIN_EXPECTED_ENTRIES path=$snapshot_dir"
+    fi
+
+    log_info "snapshot.validated" "path=$snapshot_dir size_bytes=$size_bytes entries=$entry_count"
 }
 
 build_rsync_opts() {
@@ -131,6 +193,10 @@ build_rsync_opts() {
 
     if [[ -n "$exclude_file" && -f "$exclude_file" ]]; then
         RSYNC_OPTS+=( --exclude-from="$exclude_file" )
+    fi
+
+    if (( DRY_RUN == 1 )); then
+        RSYNC_OPTS+=( --dry-run )
     fi
 
     if [[ -n "$previous_snapshot" ]]; then
@@ -181,6 +247,13 @@ create_daily_snapshot() {
 
         log_info "rsync.path.done" "path=$path"
     done
+
+    if (( DRY_RUN == 1 )); then
+        rm -rf -- "$tmp_snapshot"
+        completed=1
+        log_info "snapshot.daily.dry_run" "path=$final_snapshot"
+        return 0
+    fi
 
     mv "$tmp_snapshot" "$final_snapshot"
     completed=1

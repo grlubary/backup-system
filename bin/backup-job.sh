@@ -11,17 +11,40 @@ source "$REPO_ROOT/lib/backup-lib.sh"
 usage() {
     cat <<'EOF'
 Usage:
-  backup-job.sh <job>
-  backup-job.sh config/jobs/<job>.env
+  backup-job.sh [--dry-run] <job>
+  backup-job.sh [--dry-run] config/jobs/<job>.env
 EOF
 }
 
-if [[ $# -ne 1 ]]; then
+DRY_RUN=0
+JOB_ARG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            if [[ -n "$JOB_ARG" ]]; then
+                usage
+                exit 1
+            fi
+            JOB_ARG="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$JOB_ARG" ]]; then
     usage
     exit 1
 fi
 
-JOB_ARG="$1"
 if [[ "$JOB_ARG" == *.env || "$JOB_ARG" == */* ]]; then
     JOB_FILE="$JOB_ARG"
 else
@@ -38,6 +61,7 @@ source "$JOB_FILE"
 
 set_backup_defaults
 validate_job_config
+preflight_checks
 
 LOCK_FILE="/var/lock/backup-${JOB_NAME}.lock"
 acquire_lock "$LOCK_FILE"
@@ -79,10 +103,15 @@ on_exit() {
 
     if [[ "$BACKUP_OK" -eq 1 && "$exit_code" -eq 0 ]]; then
         write_state "$STATE_DIR" "last_success" "$run_ts"
-        write_state "$STATE_DIR" "last_status" "OK"
-        write_state "$STATE_DIR" "last_snapshot" "$DAILY_SNAPSHOT"
-        write_state "$STATE_DIR" "last_size" "$(snapshot_size_bytes "$DAILY_SNAPSHOT")"
-        log_info "backup.completed" "duration_sec=$duration snapshot=$DAILY_SNAPSHOT"
+        if (( DRY_RUN == 1 )); then
+            write_state "$STATE_DIR" "last_status" "DRY_RUN"
+            log_info "backup.completed" "duration_sec=$duration mode=dry-run"
+        else
+            write_state "$STATE_DIR" "last_status" "OK"
+            write_state "$STATE_DIR" "last_snapshot" "$DAILY_SNAPSHOT"
+            write_state "$STATE_DIR" "last_size" "$(snapshot_size_bytes "$DAILY_SNAPSHOT")"
+            log_info "backup.completed" "duration_sec=$duration snapshot=$DAILY_SNAPSHOT"
+        fi
     else
         write_state "$STATE_DIR" "last_status" "ERROR"
         if [[ ! -f "$STATE_DIR/last_size" ]]; then
@@ -101,7 +130,7 @@ trap on_exit EXIT
 
 log_info "backup.started" "job=$JOB_NAME config=$JOB_FILE"
 
-if [[ -e "$DAILY_SNAPSHOT" ]]; then
+if (( DRY_RUN == 0 )) && [[ -e "$DAILY_SNAPSHOT" ]]; then
     die "Daily snapshot already exists: $DAILY_SNAPSHOT"
 fi
 
@@ -113,25 +142,32 @@ create_daily_snapshot \
     "$EXCLUDE_FILE" \
     "${BACKUP_PATHS[@]}"
 
-ln -sfn "$DAILY_SNAPSHOT" "$LATEST_LINK"
-log_info "snapshot.latest.updated" "path=$LATEST_LINK target=$DAILY_SNAPSHOT"
+if (( DRY_RUN == 0 )); then
+    validate_snapshot_integrity "$DAILY_SNAPSHOT"
+    ln -sfn "$DAILY_SNAPSHOT" "$LATEST_LINK"
+    log_info "snapshot.latest.updated" "path=$LATEST_LINK target=$DAILY_SNAPSHOT"
+else
+    log_info "snapshot.latest.skip" "reason=dry-run path=$LATEST_LINK"
+fi
 
-if [[ "$DAY_OF_WEEK" == "7" ]]; then
+if (( DRY_RUN == 0 )) && [[ "$DAY_OF_WEEK" == "7" ]]; then
     promote_snapshot "$DAILY_SNAPSHOT" "$WEEKLY_DIR/$DATE_WEEKLY"
 fi
 
-if [[ "$DAY_OF_MONTH" == "01" ]]; then
+if (( DRY_RUN == 0 )) && [[ "$DAY_OF_MONTH" == "01" ]]; then
     promote_snapshot "$DAILY_SNAPSHOT" "$MONTHLY_DIR/$DATE_MONTHLY"
 fi
 
-if [[ "$MONTH_DAY" == "01-01" ]]; then
+if (( DRY_RUN == 0 )) && [[ "$MONTH_DAY" == "01-01" ]]; then
     promote_snapshot "$DAILY_SNAPSHOT" "$YEARLY_DIR/$DATE_YEARLY"
 fi
 
-rotate_snapshots "$DAILY_DIR" "$DAILY_KEEP"
-rotate_snapshots "$WEEKLY_DIR" "$WEEKLY_KEEP"
-rotate_snapshots "$MONTHLY_DIR" "$MONTHLY_KEEP"
-rotate_snapshots "$YEARLY_DIR" "$YEARLY_KEEP"
+if (( DRY_RUN == 0 )); then
+    rotate_snapshots "$DAILY_DIR" "$DAILY_KEEP"
+    rotate_snapshots "$WEEKLY_DIR" "$WEEKLY_KEEP"
+    rotate_snapshots "$MONTHLY_DIR" "$MONTHLY_KEEP"
+    rotate_snapshots "$YEARLY_DIR" "$YEARLY_KEEP"
+fi
 
 BACKUP_OK=1
 exit 0

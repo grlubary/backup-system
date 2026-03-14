@@ -53,11 +53,11 @@ Improve safety and robustness.
 
 Tasks:
 
-- [ ] Detect missing storage mounts
-- [ ] Detect rsync failures
-- [ ] Detect empty backups
+- [x] Detect missing storage mounts
+- [x] Detect rsync failures
+- [x] Detect empty backups
 - [ ] Detect unexpected large deletions
-- [ ] Add dry-run mode
+- [x] Add dry-run mode
 
 ---
 

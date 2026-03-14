@@ -1,6 +1,35 @@
+# Logs
 *.log
+logs/
+
+# Temp
 *.tmp
 *.swp
+*.bak
+*.cache
 
+# Secrets
+.env
+*.env
+secrets/
+*.key
+*.pem
+*.crt
+
+# Local config
+config/local/
 config/jobs/*.env
 !config/jobs/example-server.env
+!config/jobs/example-job.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Runtime
+tmp/
+run/
