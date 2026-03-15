@@ -25,3 +25,30 @@ Primera prueba recomendada:
 2. Ajustar `SOURCE_HOST`, `BACKUP_PATHS` y `DEST_ROOT`.
 3. Ejecutar `bin/backup-job.sh --dry-run <job>`.
 4. Si el dry-run es correcto, habilitar `systemctl enable --now backup-job@<job>.timer`.
+
+# Crear job configurción:
+
+cp config/jobs/example-job.env config/jobs/myjob.env
+
+Enable the timer:
+
+sudo systemctl enable backup-job@myjob.timer
+sudo systemctl start backup-job@myjob.timer
+
+sudo systemctl daemon-reload
+
+# Run a backup manualmente
+
+/opt/backup-system/bin/backup-job.sh myjob
+
+# Uninstall
+# Disable timers:
+
+sudo systemctl disable backup-job@*.timer
+sudo systemctl stop backup-job@*.timer
+
+sudo rm /etc/systemd/system/backup-job@.service
+sudo rm /etc/systemd/system/backup-job@.timer
+sudo systemctl daemon-reload
+
+sudo rm -rf /opt/backup-system
