@@ -226,7 +226,7 @@ create_daily_snapshot() {
 
     local previous_snapshot=""
     local parent_dir tmp_snapshot source_spec path
-    local completed=0
+    local completed=0  # Initialize here to avoid unbound variable errors
 
     if [[ -L "$latest_link" ]]; then
         previous_snapshot="$(readlink -f "$latest_link")"
@@ -247,9 +247,9 @@ create_daily_snapshot() {
 
     # Set up cleanup trap for interruptions
     cleanup_incomplete() {
-        if (( completed == 0 )) && [[ -n "${tmp_snapshot:-}" && -d "$tmp_snapshot" ]]; then
+        if [[ "${completed:-0}" -eq 0 ]] && [[ -n "${tmp_snapshot:-}" && -d "$tmp_snapshot" ]]; then
             printf '\n!!! Backup interrupted, cleaning up incomplete snapshot...\n' >&2
-            rm -rf -- "$tmp_snapshot"
+            rm -rf -- "$tmp_snapshot" 2>/dev/null || true
         fi
     }
     trap cleanup_incomplete EXIT INT TERM HUP
