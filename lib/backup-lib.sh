@@ -245,17 +245,9 @@ create_daily_snapshot() {
     done
     printf '✓ Cleanup completed\n' >&2
 
-    # Set up cleanup trap for interruptions - MUST be aggressive
-    cleanup_incomplete() {
-        if [[ -d "$tmp_snapshot" ]]; then
-            printf '\n!!! Backup interrupted, forcing cleanup...\n' >&2
-            # Force remove even if rsync is still writing
-            rm -rf -- "$tmp_snapshot" 2>/dev/null || true
-            sleep 1
-            rm -rf -- "$tmp_snapshot" 2>/dev/null || true
-        fi
-    }
-    trap cleanup_incomplete EXIT INT TERM HUP
+    # Set up cleanup trap for interruptions
+    # Use parent_dir to find and clean up ANY .incomplete-* directories
+    trap "find '$parent_dir' -maxdepth 1 -name '.incomplete-*' -type d -exec rm -rf {} + 2>/dev/null || true" EXIT INT TERM HUP
 
     mkdir -p "$tmp_snapshot"
     log_info "snapshot.daily.start" "target=$final_snapshot tmp=$tmp_snapshot"
