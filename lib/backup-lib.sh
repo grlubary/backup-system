@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Better diagnostics on failure: log failing command and line number.
+trap 'printf "[ERROR] command failed: %s (line %s)\n" "${BASH_COMMAND}" "${LINENO}" >&2' ERR
 IFS=$'\n\t'
 
 LOG_FILE=""
