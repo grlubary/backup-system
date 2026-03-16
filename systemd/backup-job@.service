@@ -11,6 +11,8 @@ ExecStart=/opt/backup-system/bin/backup-job.sh %i
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
+KillMode=control-group
+TimeoutStopSec=2m
 
 [Install]
 WantedBy=multi-user.target
