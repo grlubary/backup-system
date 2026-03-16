@@ -105,11 +105,13 @@ on_exit() {
         write_state "$STATE_DIR" "last_success" "$run_ts"
         if (( DRY_RUN == 1 )); then
             write_state "$STATE_DIR" "last_status" "DRY_RUN"
+            printf '\n✓ DRY-RUN completed successfully\n' >&2
             log_info "backup.completed" "duration_sec=$duration mode=dry-run"
         else
             write_state "$STATE_DIR" "last_status" "OK"
             write_state "$STATE_DIR" "last_snapshot" "$DAILY_SNAPSHOT"
             write_state "$STATE_DIR" "last_size" "$(snapshot_size_bytes "$DAILY_SNAPSHOT")"
+            printf '\n✓ Backup completed successfully!\n' >&2
             log_info "backup.completed" "duration_sec=$duration snapshot=$DAILY_SNAPSHOT"
         fi
     else
@@ -123,6 +125,7 @@ on_exit() {
         if [[ ! -f "$STATE_DIR/last_success" ]]; then
             write_state "$STATE_DIR" "last_success" ""
         fi
+        printf '\n❌ Backup failed or was interrupted\n' >&2
         log_error "backup.failed" "duration_sec=$duration exit_code=$exit_code"
     fi
 }
@@ -136,6 +139,9 @@ printf '==========================================\n' >&2
 printf 'Job Config: %s\n' "$JOB_FILE" >&2
 printf 'Destination: %s\n' "$DEST_ROOT" >&2
 printf 'Mode: %s\n' "$([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'NORMAL')" >&2
+printf 'Source Host: %s\n' "${SOURCE_HOST:-localhost}" >&2
+printf 'Backup Paths: %s\n' "${#BACKUP_PATHS[@]}" >&2
+printf '\n💡 Press Ctrl+C to interrupt (incomplete data will be cleaned up)\n' >&2
 printf '\n' >&2
 
 if (( DRY_RUN == 0 )) && [[ -e "$DAILY_SNAPSHOT" ]]; then
@@ -183,6 +189,10 @@ fi
 
 printf '\n==========================================\n' >&2
 printf '✓ Backup completed successfully!\n' >&2
+printf '==========================================\n' >&2
+printf 'Job: %s\n' "$JOB_NAME" >&2
+printf 'Snapshot: %s\n' "$DAILY_SNAPSHOT" >&2
+printf 'Duration: %d seconds\n' "$((end_ts - START_TS))" >&2
 printf '==========================================\n' >&2
 
 BACKUP_OK=1

@@ -144,6 +144,11 @@ preflight_checks() {
     fi
 
     [[ -w "$DEST_ROOT" ]] || die "Destination root is not writable: $DEST_ROOT"
+
+    # Test creating a test directory to ensure we can write
+    if ! mkdir -p "$DEST_ROOT/.backup-test-dir" 2>/dev/null || ! rmdir "$DEST_ROOT/.backup-test-dir" 2>/dev/null; then
+        die "Cannot create directories in destination root: $DEST_ROOT"
+    fi
     [[ -w "$LOG_ROOT" ]] || die "Log root is not writable: $LOG_ROOT"
     [[ -w "$STATE_ROOT" ]] || die "State root is not writable: $STATE_ROOT"
 }
@@ -186,7 +191,8 @@ build_rsync_opts() {
         --partial
         --stats
         --verbose
-        --progress
+        --info=progress2
+        --human-readable
     )
 
     if [[ -n "$source_host" ]]; then
@@ -230,14 +236,40 @@ create_daily_snapshot() {
 
     parent_dir="$(dirname "$final_snapshot")"
     tmp_snapshot="$parent_dir/.incomplete-$(basename "$final_snapshot")-$$"
-    trap 'if (( completed == 0 )) && [[ -n "${tmp_snapshot:-}" && -d "$tmp_snapshot" ]]; then rm -rf -- "$tmp_snapshot"; fi' RETURN
+
+    # Clean up any leftover incomplete snapshots from previous runs
+    printf '>>> Cleaning up leftover incomplete snapshots...\n' >&2
+    if find "$parent_dir" -maxdepth 1 -name ".incomplete-*" -type d -exec rm -rf {} + 2>/dev/null; then
+        printf '✓ Cleanup completed\n' >&2
+    else
+        printf '⚠️  Warning: Could not clean up some incomplete snapshots\n' >&2
+    fi
+
+    # Set up cleanup trap for interruptions
+    cleanup_incomplete() {
+        if (( completed == 0 )) && [[ -n "${tmp_snapshot:-}" && -d "$tmp_snapshot" ]]; then
+            printf '\n!!! Backup interrupted, cleaning up incomplete snapshot...\n' >&2
+            rm -rf -- "$tmp_snapshot"
+        fi
+    }
+    trap cleanup_incomplete EXIT INT TERM HUP
 
     mkdir -p "$tmp_snapshot"
     log_info "snapshot.daily.start" "target=$final_snapshot tmp=$tmp_snapshot"
 
+    # Verify destination is writable
+    if ! touch "$tmp_snapshot/.backup-test" 2>/dev/null; then
+        die "Cannot write to destination directory: $tmp_snapshot"
+    fi
+    rm -f "$tmp_snapshot/.backup-test"
+
+    local total_paths=${#backup_paths[@]}
+    local current_path=0
+
     for path in "${backup_paths[@]}"; do
-        printf '\n>>> Starting backup for: %s\n' "$path" >&2
-        log_info "rsync.path.start" "path=$path"
+        ((current_path++))
+        printf '\n>>> [%d/%d] Starting backup for: %s\n' "$current_path" "$total_paths" "$path" >&2
+        log_info "rsync.path.start" "path=$path progress=$current_path/$total_paths"
 
         if [[ -n "$source_host" ]]; then
             source_spec="${source_host}:${path}/"
@@ -245,21 +277,41 @@ create_daily_snapshot() {
             source_spec="${path}/"
         fi
 
-        mkdir -p "$(dirname "$tmp_snapshot$path")"
-        rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" >&2
+        # Create the full path structure in the snapshot directory
+        if ! mkdir -p "$tmp_snapshot$path" 2>/dev/null; then
+            log_warn "mkdir.failed" "path=$tmp_snapshot$path"
+            continue
+        fi
 
-        log_info "rsync.path.done" "path=$path"
+        # Run rsync - show output when running interactively
+        if [[ -t 1 && -z "${INVOCATION_ID:-}" ]]; then
+            printf '\n>>> Running rsync for %s...\n' "$path" >&2
+            if ! rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/"; then
+                log_error "rsync.failed" "path=$path exit_code=$?"
+                continue
+            fi
+        else
+            if ! rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" >&2; then
+                log_error "rsync.failed" "path=$path exit_code=$?"
+                continue
+            fi
+        fi
+
+        printf '✓ Completed backup for: %s\n' "$path" >&2
+        log_info "rsync.path.done" "path=$path progress=$current_path/$total_paths"
     done
 
     if (( DRY_RUN == 1 )); then
         rm -rf -- "$tmp_snapshot"
         completed=1
+        printf '✓ DRY-RUN completed: %s\n' "$final_snapshot" >&2
         log_info "snapshot.daily.dry_run" "path=$final_snapshot"
         return 0
     fi
 
     mv "$tmp_snapshot" "$final_snapshot"
     completed=1
+    printf '✓ Snapshot created successfully: %s\n' "$final_snapshot" >&2
     log_info "snapshot.daily.done" "path=$final_snapshot"
 }
 

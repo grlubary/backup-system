@@ -92,6 +92,12 @@ sudo systemctl enable --now backup-job@myjob.timer
 /opt/backup-system/bin/backup-job.sh myjob
 ```
 
+**Características:**
+- Barra de progreso en tiempo real
+- Limpieza automática de backups incompletos
+- Interrupción segura con Ctrl+C
+- Feedback visual completo
+
 # Uninstall
 
 ## Desinstalación automática
