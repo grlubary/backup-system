@@ -85,6 +85,13 @@ LOG_FILE="$LOG_DIR/$DATE_DAILY.log"
 mkdir -p "$DAILY_DIR" "$WEEKLY_DIR" "$MONTHLY_DIR" "$YEARLY_DIR" "$STATE_DIR" "$LOG_DIR"
 init_logging "$LOG_FILE" "$JOB_NAME"
 
+# Force cleanup of any leftover incomplete snapshots before starting
+printf '[%s] Checking for leftover incomplete snapshots...\n' "$(date '+%F %T')" >&2
+find "$DAILY_DIR" -maxdepth 1 -name ".incomplete-*" -type d 2>/dev/null | while read -r incomplete_dir; do
+    printf '[%s] Removing leftover: %s\n' "$(date '+%F %T')" "$incomplete_dir" >&2
+    rm -rf -- "$incomplete_dir" 2>/dev/null || true
+done
+
 LOCK_FILE="/var/lock/backup-${JOB_NAME}.lock"
 acquire_lock "$LOCK_FILE"
 

@@ -237,18 +237,21 @@ create_daily_snapshot() {
     parent_dir="$(dirname "$final_snapshot")"
     tmp_snapshot="$parent_dir/.incomplete-$(basename "$final_snapshot")-$$"
 
-    # Clean up any leftover incomplete snapshots from previous runs
+    # Aggressive cleanup of ALL incomplete snapshots from previous runs
     printf '>>> Cleaning up leftover incomplete snapshots...\n' >&2
-    if find "$parent_dir" -maxdepth 1 -name ".incomplete-*" -type d -exec rm -rf {} + 2>/dev/null; then
-        printf '✓ Cleanup completed\n' >&2
-    else
-        printf '⚠️  Warning: Could not clean up some incomplete snapshots\n' >&2
-    fi
+    find "$parent_dir" -maxdepth 1 -name ".incomplete-*" -type d 2>/dev/null | while read -r leftover; do
+        printf 'Removing: %s\n' "$leftover" >&2
+        rm -rf -- "$leftover" 2>/dev/null || true
+    done
+    printf '✓ Cleanup completed\n' >&2
 
-    # Set up cleanup trap for interruptions
+    # Set up cleanup trap for interruptions - MUST be aggressive
     cleanup_incomplete() {
-        if [[ "${completed:-0}" -eq 0 ]] && [[ -n "${tmp_snapshot:-}" && -d "$tmp_snapshot" ]]; then
-            printf '\n!!! Backup interrupted, cleaning up incomplete snapshot...\n' >&2
+        if [[ -d "$tmp_snapshot" ]]; then
+            printf '\n!!! Backup interrupted, forcing cleanup...\n' >&2
+            # Force remove even if rsync is still writing
+            rm -rf -- "$tmp_snapshot" 2>/dev/null || true
+            sleep 1
             rm -rf -- "$tmp_snapshot" 2>/dev/null || true
         fi
     }
@@ -286,15 +289,19 @@ create_daily_snapshot() {
         # Run rsync - show output when running interactively
         if [[ -t 1 && -z "${INVOCATION_ID:-}" ]]; then
             printf '\n>>> Running rsync for %s...\n' "$path" >&2
-            if ! rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/"; then
-                log_error "rsync.failed" "path=$path exit_code=$?"
+            rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" || {
+                local rsync_exit=$?
+                log_error "rsync.failed" "path=$path exit_code=$rsync_exit"
+                printf '⚠️  Rsync failed for %s, continuing with next path...\n' "$path" >&2
                 continue
-            fi
+            }
         else
-            if ! rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" >&2; then
-                log_error "rsync.failed" "path=$path exit_code=$?"
+            rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" >&2 || {
+                local rsync_exit=$?
+                log_error "rsync.failed" "path=$path exit_code=$rsync_exit"
+                printf '⚠️  Rsync failed for %s, continuing with next path...\n' "$path" >&2
                 continue
-            fi
+            }
         fi
 
         printf '✓ Completed backup for: %s\n' "$path" >&2
