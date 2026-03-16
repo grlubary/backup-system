@@ -44,7 +44,13 @@ curl -s https://raw.githubusercontent.com/grlubary/backup-system/main/scripts/in
 
 ## Instalación manual
 
-Clonar el repositorio y ejecutar el script:
+Descargar y ejecutar el script de instalación:
+
+```bash
+curl -s https://raw.githubusercontent.com/grlubary/backup-system/main/scripts/install.sh | sudo bash
+```
+
+O clonar el repositorio completo para desarrollo:
 
 ```bash
 git clone https://github.com/grlubary/backup-system.git
@@ -53,7 +59,7 @@ sudo scripts/install.sh
 ```
 
 Esto instalará:
-- Dependencias (rsync, git, util-linux)
+- Dependencias (rsync, curl, util-linux)
 - Sistema de backup en `/opt/backup-system`
 - Directorios necesarios (/var/log/backup-system, /var/lib/backup-state)
 - Definiciones systemd para servicios y timers

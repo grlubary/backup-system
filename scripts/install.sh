@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO="https://github.com/grlubary/backup-system.git"
+REPO_BASE="https://raw.githubusercontent.com/grlubary/backup-system/main"
 INSTALL_DIR="/opt/backup-system"
 SYSTEMD_DIR="/etc/systemd/system"
 
@@ -15,21 +15,48 @@ fi
 echo "Installing dependencies..."
 
 apt-get update
-apt-get install -y rsync git util-linux
+apt-get install -y rsync curl util-linux
 
-echo "Cloning repository..."
+echo "Creating installation directory..."
 
 if [[ -d "$INSTALL_DIR" ]]; then
   echo "Directory already exists: $INSTALL_DIR"
-else
-  git clone "$REPO" "$INSTALL_DIR"
+  echo "Removing existing installation..."
+  rm -rf "$INSTALL_DIR"
 fi
+
+mkdir -p "$INSTALL_DIR"
+
+echo "Downloading backup system files..."
+
+# Create directory structure
+mkdir -p "$INSTALL_DIR/bin"
+mkdir -p "$INSTALL_DIR/lib"
+mkdir -p "$INSTALL_DIR/config/jobs"
+mkdir -p "$INSTALL_DIR/config/excludes"
+mkdir -p "$INSTALL_DIR/systemd"
+mkdir -p "$INSTALL_DIR/docs"
+
+# Download core scripts
+curl -s -o "$INSTALL_DIR/bin/backup-job.sh" "$REPO_BASE/bin/backup-job.sh"
+curl -s -o "$INSTALL_DIR/lib/backup-lib.sh" "$REPO_BASE/lib/backup-lib.sh"
+
+# Download configuration files
+curl -s -o "$INSTALL_DIR/config/jobs/example-job.env" "$REPO_BASE/config/jobs/example-job.env"
+curl -s -o "$INSTALL_DIR/config/jobs/webserver.env" "$REPO_BASE/config/jobs/webserver.env"
+curl -s -o "$INSTALL_DIR/config/excludes/linux-common.txt" "$REPO_BASE/config/excludes/linux-common.txt"
+
+# Download systemd files
+curl -s -o "$INSTALL_DIR/systemd/backup-job@.service" "$REPO_BASE/systemd/backup-job@.service"
+curl -s -o "$INSTALL_DIR/systemd/backup-job@.timer" "$REPO_BASE/systemd/backup-job@.timer"
+
+# Make scripts executable
+chmod +x "$INSTALL_DIR/bin/backup-job.sh"
 
 echo "Creating directories..."
 
 mkdir -p /var/log/backup-system
 mkdir -p /var/lib/backup-state
-mkdir -p "$INSTALL_DIR/config/jobs"
 
 echo "Installing systemd service..."
 
