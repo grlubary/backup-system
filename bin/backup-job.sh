@@ -130,6 +130,14 @@ trap on_exit EXIT
 
 log_info "backup.started" "job=$JOB_NAME config=$JOB_FILE"
 
+printf '\n==========================================\n' >&2
+printf 'Starting Backup Job: %s\n' "$JOB_NAME" >&2
+printf '==========================================\n' >&2
+printf 'Job Config: %s\n' "$JOB_FILE" >&2
+printf 'Destination: %s\n' "$DEST_ROOT" >&2
+printf 'Mode: %s\n' "$([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'NORMAL')" >&2
+printf '\n' >&2
+
 if (( DRY_RUN == 0 )) && [[ -e "$DAILY_SNAPSHOT" ]]; then
     die "Daily snapshot already exists: $DAILY_SNAPSHOT"
 fi
@@ -145,8 +153,10 @@ create_daily_snapshot \
 if (( DRY_RUN == 0 )); then
     validate_snapshot_integrity "$DAILY_SNAPSHOT"
     ln -sfn "$DAILY_SNAPSHOT" "$LATEST_LINK"
+    printf '\n✓ Snapshot latest link updated\n' >&2
     log_info "snapshot.latest.updated" "path=$LATEST_LINK target=$DAILY_SNAPSHOT"
 else
+    printf '\n✓ DRY-RUN: Skipping snapshot latest link\n' >&2
     log_info "snapshot.latest.skip" "reason=dry-run path=$LATEST_LINK"
 fi
 
@@ -163,11 +173,17 @@ if (( DRY_RUN == 0 )) && [[ "$MONTH_DAY" == "01-01" ]]; then
 fi
 
 if (( DRY_RUN == 0 )); then
+    printf '\n>>> Rotating snapshots...\n' >&2
     rotate_snapshots "$DAILY_DIR" "$DAILY_KEEP"
     rotate_snapshots "$WEEKLY_DIR" "$WEEKLY_KEEP"
     rotate_snapshots "$MONTHLY_DIR" "$MONTHLY_KEEP"
     rotate_snapshots "$YEARLY_DIR" "$YEARLY_KEEP"
+    printf '✓ Snapshots rotated\n' >&2
 fi
+
+printf '\n==========================================\n' >&2
+printf '✓ Backup completed successfully!\n' >&2
+printf '==========================================\n' >&2
 
 BACKUP_OK=1
 exit 0

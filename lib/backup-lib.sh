@@ -185,6 +185,8 @@ build_rsync_opts() {
         --numeric-ids
         --partial
         --stats
+        --verbose
+        --progress
     )
 
     if [[ -n "$source_host" ]]; then
@@ -234,6 +236,7 @@ create_daily_snapshot() {
     log_info "snapshot.daily.start" "target=$final_snapshot tmp=$tmp_snapshot"
 
     for path in "${backup_paths[@]}"; do
+        printf '\n>>> Starting backup for: %s\n' "$path" >&2
         log_info "rsync.path.start" "path=$path"
 
         if [[ -n "$source_host" ]]; then
@@ -243,7 +246,7 @@ create_daily_snapshot() {
         fi
 
         mkdir -p "$(dirname "$tmp_snapshot$path")"
-        rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/"
+        rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" >&2
 
         log_info "rsync.path.done" "path=$path"
     done
