@@ -63,9 +63,6 @@ set_backup_defaults
 validate_job_config
 preflight_checks
 
-LOCK_FILE="/var/lock/backup-${JOB_NAME}.lock"
-acquire_lock "$LOCK_FILE"
-
 DATE_DAILY="$(date +%F)"
 DATE_WEEKLY="$(date +%G-%V)"
 DATE_MONTHLY="$(date +%Y-%m)"
@@ -87,6 +84,9 @@ LOG_FILE="$LOG_DIR/$DATE_DAILY.log"
 
 mkdir -p "$DAILY_DIR" "$WEEKLY_DIR" "$MONTHLY_DIR" "$YEARLY_DIR" "$STATE_DIR" "$LOG_DIR"
 init_logging "$LOG_FILE" "$JOB_NAME"
+
+LOCK_FILE="/var/lock/backup-${JOB_NAME}.lock"
+acquire_lock "$LOCK_FILE"
 
 START_TS="$(date +%s)"
 BACKUP_OK=0
