@@ -26,29 +26,90 @@ Primera prueba recomendada:
 3. Ejecutar `bin/backup-job.sh --dry-run <job>`.
 4. Si el dry-run es correcto, habilitar `systemctl enable --now backup-job@<job>.timer`.
 
-# Crear job configurción:
+# Install
 
+## Instalación rápida
+
+```bash
+curl -s https://raw.githubusercontent.com/grlubary/backup-system/main/scripts/install.sh | sudo bash
+```
+
+## Instalación manual
+
+Clonar el repositorio y ejecutar el script:
+
+```bash
+git clone https://github.com/grlubary/backup-system.git
+cd backup-system
+sudo scripts/install.sh
+```
+
+Esto instalará:
+- Dependencias (rsync, git, util-linux)
+- Sistema de backup en `/opt/backup-system`
+- Directorios necesarios (/var/log, /var/lib, /backup-repo)
+- Definiciones systemd para servicios y timers
+
+# Configurar un job
+
+Copiar la configuración de ejemplo:
+
+```bash
 cp config/jobs/example-job.env config/jobs/myjob.env
+```
 
-Enable the timer:
+Editar los parámetros: `SOURCE_HOST`, `BACKUP_PATHS`, `DEST_ROOT` y política de retención.
 
-sudo systemctl enable backup-job@myjob.timer
-sudo systemctl start backup-job@myjob.timer
+Probar con dry-run:
 
-sudo systemctl daemon-reload
+```bash
+/opt/backup-system/bin/backup-job.sh --dry-run myjob
+```
 
-# Run a backup manualmente
+Habilitar el timer (ejecución automática):
 
+```bash
+sudo systemctl enable --now backup-job@myjob.timer
+```
+
+# Ejecutar backup manualmente
+
+```bash
 /opt/backup-system/bin/backup-job.sh myjob
+```
 
 # Uninstall
-# Disable timers:
 
+## Desinstalación automática
+
+```bash
+sudo scripts/uninstall.sh [--keep-backups|--remove-backups]
+```
+
+Opciones:
+- Sin argumentos: mantiene los backups en `/backup-repo` (recomendado)
+- `--keep-backups`: igual que sin argumentos
+- `--remove-backups`: elimina también el repositorio de backups
+
+## Desinstalación manual
+
+Si prefieres desinstalar paso a paso:
+
+```bash
+# Deshabilitar y detener timers
 sudo systemctl disable backup-job@*.timer
 sudo systemctl stop backup-job@*.timer
 
+# Remover definiciones systemd
 sudo rm /etc/systemd/system/backup-job@.service
 sudo rm /etc/systemd/system/backup-job@.timer
 sudo systemctl daemon-reload
 
+# Remover instalación
 sudo rm -rf /opt/backup-system
+sudo rm -rf /var/lib/backup-state
+sudo rm -rf /var/log/backup-system
+
+# Opcional: remover backups
+sudo rm -rf /backup-repo
+```
