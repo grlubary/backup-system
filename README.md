@@ -15,9 +15,17 @@ Características:
 - dry-run para validación inicial
 - preflight checks de destino y dependencias
 
-Repositorio principal de snapshots:
+Estructura de snapshots:
 
-/backup-repo/snapshots
+Los snapshots se almacenan en el directorio configurado en `DEST_ROOT` con la estructura:
+
+```
+DEST_ROOT/snapshots/<job>/
+├── daily/
+├── weekly/
+├── monthly/
+└── yearly/
+```
 
 Primera prueba recomendada:
 
@@ -47,7 +55,7 @@ sudo scripts/install.sh
 Esto instalará:
 - Dependencias (rsync, git, util-linux)
 - Sistema de backup en `/opt/backup-system`
-- Directorios necesarios (/var/log, /var/lib, /backup-repo)
+- Directorios necesarios (/var/log/backup-system, /var/lib/backup-state)
 - Definiciones systemd para servicios y timers
 
 # Configurar un job
@@ -83,13 +91,16 @@ sudo systemctl enable --now backup-job@myjob.timer
 ## Desinstalación automática
 
 ```bash
-sudo scripts/uninstall.sh [--keep-backups|--remove-backups]
+sudo scripts/uninstall.sh
 ```
 
-Opciones:
-- Sin argumentos: mantiene los backups en `/backup-repo` (recomendado)
-- `--keep-backups`: igual que sin argumentos
-- `--remove-backups`: elimina también el repositorio de backups
+Esto desinstalará completamente el sistema de backup, incluyendo:
+- Deshabilitación y detención de todos los timers y servicios
+- Eliminación de las definiciones systemd
+- Remoción del directorio de instalación `/opt/backup-system`
+- Limpieza de directorios de estado y logs
+
+**Nota**: Los backups existentes en el directorio configurado en `DEST_ROOT` se mantendrán intactos.
 
 ## Desinstalación manual
 
@@ -109,7 +120,4 @@ sudo systemctl daemon-reload
 sudo rm -rf /opt/backup-system
 sudo rm -rf /var/lib/backup-state
 sudo rm -rf /var/log/backup-system
-
-# Opcional: remover backups
-sudo rm -rf /backup-repo
 ```

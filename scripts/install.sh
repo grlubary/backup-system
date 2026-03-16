@@ -29,7 +29,6 @@ echo "Creating directories..."
 
 mkdir -p /var/log/backup-system
 mkdir -p /var/lib/backup-state
-mkdir -p /backup-repo
 mkdir -p "$INSTALL_DIR/config/jobs"
 
 echo "Installing systemd service..."
