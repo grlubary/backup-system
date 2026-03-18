@@ -198,9 +198,8 @@ validate_snapshot_integrity() {
 
 build_rsync_opts() {
     local source_host="$1"
-    local previous_snapshot="$2"
-    local ssh_cmd="$3"
-    local exclude_file="$4"
+    local ssh_cmd="$2"
+    local exclude_file="$3"
 
     RSYNC_OPTS=(
         -aHAX
@@ -225,12 +224,7 @@ build_rsync_opts() {
         RSYNC_OPTS+=( --dry-run )
     fi
 
-    if [[ -n "$previous_snapshot" ]]; then
-        RSYNC_OPTS+=( --link-dest="$previous_snapshot" )
-        log_info "snapshot.previous" "path=$previous_snapshot"
-    else
-        log_info "snapshot.first" "No previous snapshot found"
-    fi
+    :
 }
 
 create_daily_snapshot() {
@@ -244,13 +238,15 @@ create_daily_snapshot() {
 
     local previous_snapshot=""
     local parent_dir tmp_snapshot source_spec path
-    local completed=0  # Initialize here to avoid unbound variable errors
+    local path_rsync_opts=()
+    local rel_path previous_path
+    local had_errors=0
 
     if [[ -L "$latest_link" ]]; then
         previous_snapshot="$(readlink -f "$latest_link")"
     fi
 
-    build_rsync_opts "$source_host" "$previous_snapshot" "$ssh_cmd" "$exclude_file"
+    build_rsync_opts "$source_host" "$ssh_cmd" "$exclude_file"
 
     parent_dir="$(dirname "$final_snapshot")"
     tmp_snapshot="$parent_dir/.incomplete-$(basename "$final_snapshot")-$$"
@@ -263,9 +259,9 @@ create_daily_snapshot() {
     done
     printf '✓ Cleanup completed\n' >&2
 
-    # Set up cleanup trap for interruptions (kill rsync + remove incomplete snapshots)
+    # Keep the parent dir visible to the main EXIT trap so failed runs clean up.
     INCOMPLETE_PARENT_DIR="$parent_dir"
-    trap 'cleanup_incomplete_and_kill "$INCOMPLETE_PARENT_DIR"' EXIT INT TERM HUP
+    trap 'cleanup_incomplete_and_kill "$INCOMPLETE_PARENT_DIR"; exit 130' INT TERM HUP
 
     mkdir -p "$tmp_snapshot"
     log_info "snapshot.daily.start" "target=$final_snapshot tmp=$tmp_snapshot"
@@ -291,9 +287,24 @@ create_daily_snapshot() {
             source_spec="${path}/"
         fi
 
+        path_rsync_opts=("${RSYNC_OPTS[@]}")
+        if [[ -n "$previous_snapshot" ]]; then
+            rel_path="${path#/}"
+            previous_path="$previous_snapshot/$rel_path"
+            if [[ -d "$previous_path" ]]; then
+                path_rsync_opts+=( --link-dest="$previous_path" )
+                log_info "snapshot.previous" "path=$previous_path source=$path"
+            else
+                log_warn "snapshot.previous.missing" "path=$previous_path source=$path"
+            fi
+        else
+            log_info "snapshot.first" "No previous snapshot found source=$path"
+        fi
+
         # Create the full path structure in the snapshot directory
         if ! mkdir -p "$tmp_snapshot$path" 2>/dev/null; then
             log_warn "mkdir.failed" "path=$tmp_snapshot$path"
+            had_errors=1
             continue
         fi
 
@@ -302,15 +313,19 @@ create_daily_snapshot() {
             printf '\n>>> Running rsync for %s...\n' "$path" >&2
         fi
 
-        rsync "${RSYNC_OPTS[@]}" "$source_spec" "$tmp_snapshot$path/" >&2 &
+        rsync "${path_rsync_opts[@]}" "$source_spec" "$tmp_snapshot$path/" >&2 &
         RSYNC_PID=$!
-        wait "$RSYNC_PID"
-        rsync_exit=$?
+        if wait "$RSYNC_PID"; then
+            rsync_exit=0
+        else
+            rsync_exit=$?
+        fi
         RSYNC_PID=0
 
         if (( rsync_exit != 0 )); then
             log_error "rsync.failed" "path=$path exit_code=$rsync_exit"
             printf '⚠️  Rsync failed for %s, continuing with next path...\n' "$path" >&2
+            had_errors=1
             continue
         fi
 
@@ -320,14 +335,23 @@ create_daily_snapshot() {
 
     if (( DRY_RUN == 1 )); then
         rm -rf -- "$tmp_snapshot"
-        completed=1
+        trap - INT TERM HUP
+        INCOMPLETE_PARENT_DIR=""
         printf '✓ DRY-RUN completed: %s\n' "$final_snapshot" >&2
         log_info "snapshot.daily.dry_run" "path=$final_snapshot"
         return 0
     fi
 
+    if (( had_errors != 0 )); then
+        rm -rf -- "$tmp_snapshot"
+        trap - INT TERM HUP
+        INCOMPLETE_PARENT_DIR=""
+        die "One or more rsync operations failed; snapshot was discarded path=$final_snapshot"
+    fi
+
     mv "$tmp_snapshot" "$final_snapshot"
-    completed=1
+    trap - INT TERM HUP
+    INCOMPLETE_PARENT_DIR=""
     printf '✓ Snapshot created successfully: %s\n' "$final_snapshot" >&2
     log_info "snapshot.daily.done" "path=$final_snapshot"
 }

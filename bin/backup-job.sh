@@ -107,6 +107,12 @@ on_exit() {
     end_ts="$(date +%s)"
     duration="$((end_ts - START_TS))"
     run_ts="$(date '+%F %T')"
+
+    if [[ -n "${INCOMPLETE_PARENT_DIR:-}" ]]; then
+        cleanup_incomplete_and_kill "$INCOMPLETE_PARENT_DIR"
+        INCOMPLETE_PARENT_DIR=""
+    fi
+
     write_state "$STATE_DIR" "last_run" "$run_ts"
     write_state "$STATE_DIR" "last_duration" "$duration"
 
@@ -196,12 +202,14 @@ if (( DRY_RUN == 0 )); then
     printf '✓ Snapshots rotated\n' >&2
 fi
 
+END_TS="$(date +%s)"
+
 printf '\n==========================================\n' >&2
 printf '✓ Backup completed successfully!\n' >&2
 printf '==========================================\n' >&2
 printf 'Job: %s\n' "$JOB_NAME" >&2
 printf 'Snapshot: %s\n' "$DAILY_SNAPSHOT" >&2
-printf 'Duration: %d seconds\n' "$((end_ts - START_TS))" >&2
+printf 'Duration: %d seconds\n' "$((END_TS - START_TS))" >&2
 printf '==========================================\n' >&2
 
 BACKUP_OK=1

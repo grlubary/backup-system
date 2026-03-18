@@ -1,0 +1,4 @@
+# Glassfish logs
+/opt/glassfish4/glassfish/domains/domain1/logs/
+
+/home/orch_interface/.git/
