@@ -158,15 +158,28 @@ preflight_checks() {
 
     if (( REQUIRE_MOUNT == 1 )); then
         require_command mountpoint
-        mountpoint -q "$DEST_ROOT" || die "Destination root is not a mounted filesystem: $DEST_ROOT"
+        require_command df
+
+        local mount_base
+
+        if [[ -n "${MOUNT_POINT:-}" ]]; then
+            mount_base="$MOUNT_POINT"
+        else
+            mount_base="$(df -P "$DEST_ROOT" 2>/dev/null | awk 'NR==2 {print $6}')"
+        fi
+
+        [[ -n "$mount_base" ]] || die "Could not determine mount base for DEST_ROOT: $DEST_ROOT"
+
+        mountpoint -q "$mount_base" || die "Destination mount is not mounted: $mount_base (DEST_ROOT=$DEST_ROOT)"
     fi
 
     [[ -w "$DEST_ROOT" ]] || die "Destination root is not writable: $DEST_ROOT"
 
-    # Test creating a test directory to ensure we can write
+    # Test real write capability
     if ! mkdir -p "$DEST_ROOT/.backup-test-dir" 2>/dev/null || ! rmdir "$DEST_ROOT/.backup-test-dir" 2>/dev/null; then
         die "Cannot create directories in destination root: $DEST_ROOT"
     fi
+
     [[ -w "$LOG_ROOT" ]] || die "Log root is not writable: $LOG_ROOT"
     [[ -w "$STATE_ROOT" ]] || die "State root is not writable: $STATE_ROOT"
 }

@@ -142,27 +142,12 @@ fi
 write_state "$STATE_DIR" "last_status" "SEEDING"
 write_state "$STATE_DIR" "seed_snapshot" "$SEED_SNAPSHOT"
 
-RSYNC_BASE_OPTS=(
-    -aHAX
-    --delete
-    --numeric-ids
-    --partial
+build_rsync_opts "${SOURCE_HOST:-}" "$RSYNC_SSH" "$EXCLUDE_FILE"
+RSYNC_BASE_OPTS=("${RSYNC_OPTS[@]}")
+RSYNC_BASE_OPTS+=(
     --append-verify
-    --stats
-    --verbose
-    --info=progress2
-    --human-readable
     --timeout=14400
-    --contimeout=60
 )
-
-if [[ -n "${SOURCE_HOST:-}" ]]; then
-    RSYNC_BASE_OPTS+=( -e "$RSYNC_SSH" )
-fi
-
-if [[ -n "$EXCLUDE_FILE" && -f "$EXCLUDE_FILE" ]]; then
-    RSYNC_BASE_OPTS+=( --exclude-from="$EXCLUDE_FILE" )
-fi
 
 TOTAL_PATHS="${#BACKUP_PATHS[@]}"
 CURRENT_PATH=0
