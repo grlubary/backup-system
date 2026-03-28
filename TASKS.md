@@ -32,11 +32,11 @@ Allow monitoring systems to verify backup health.
 
 Tasks:
 
-- [ ] Write state files to /var/lib/backup-state/<job>/
-- [ ] Implement last_status
-- [ ] Implement last_duration
-- [ ] Implement last_snapshot
-- [ ] Implement last_size
+- [x] Write state files to /var/lib/backup-state/<job>/
+- [x] Implement last_status
+- [x] Implement last_duration
+- [x] Implement last_snapshot
+- [x] Implement last_size
 - [ ] Implement exit codes for monitoring
 
 Future:
@@ -56,7 +56,12 @@ Tasks:
 - [x] Detect missing storage mounts
 - [x] Detect rsync failures
 - [x] Detect empty backups
-- [ ] Detect unexpected large deletions
+- [ ] Detect unexpected large deletions (rsync --delete safety)
+- [ ] Detect abnormal snapshot size (sudden drop vs previous)
+- [ ] Parse rsync --stats output for validation
+- [ ] Define safety thresholds (delete %, size ratio)
+- [ ] Fail backup on critical anomalies
+- [ ] Log anomalies for monitoring integration
 - [x] Add dry-run mode
 
 ---

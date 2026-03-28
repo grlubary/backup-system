@@ -66,7 +66,7 @@ validate_job_config
 preflight_checks
 
 DATE_DAILY="$(date +%F)"
-DATE_WEEKLY="$(date +%G-%V)"
+DATE_WEEKLY="$(date +%G-W%V)"
 DATE_MONTHLY="$(date +%Y-%m)"
 DATE_YEARLY="$(date +%Y)"
 DAY_OF_WEEK="$(date +%u)"
